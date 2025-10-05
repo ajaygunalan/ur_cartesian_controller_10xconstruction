@@ -72,6 +72,7 @@ install(DIRECTORY config/
 
 install(PROGRAMS
   scripts/demo_grid.py
+  scripts/plot_velocity.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

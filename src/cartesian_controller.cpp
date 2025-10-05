@@ -270,6 +270,9 @@ CartesianController::CartesianController(const rclcpp::NodeOptions& opt)
   pub_cmd_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(
       "/forward_velocity_controller/commands", rclcpp::SystemDefaultsQoS());
 
+  pub_cartesian_vel_ = this->create_publisher<geometry_msgs::msg::TwistStamped>(
+      "/cartesian_controller/cartesian_velocity", rclcpp::SystemDefaultsQoS());
+
   sub_js_ = this->create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states", rclcpp::SensorDataQoS(),
       std::bind(&CartesianController::onJointState, this, std::placeholders::_1));
@@ -504,6 +507,20 @@ void CartesianController::onTimer() {
   cmd.data.resize(7);
   for (int i=0;i<7;++i) cmd.data[i] = res.dq(i);
   pub_cmd_->publish(cmd);
+
+  // Publish Cartesian velocity: V = J * dq
+  Eigen::Matrix<double,6,1> V_cartesian = J * res.dq;
+  geometry_msgs::msg::TwistStamped twist_msg;
+  twist_msg.header.stamp = this->now();
+  twist_msg.header.frame_id = root_link_;
+  // KDL Jacobian ordering: [angular(0:2); linear(3:5)]
+  twist_msg.twist.angular.x = V_cartesian(0);
+  twist_msg.twist.angular.y = V_cartesian(1);
+  twist_msg.twist.angular.z = V_cartesian(2);
+  twist_msg.twist.linear.x = V_cartesian(3);
+  twist_msg.twist.linear.y = V_cartesian(4);
+  twist_msg.twist.linear.z = V_cartesian(5);
+  pub_cartesian_vel_->publish(twist_msg);
 
   if (convergenceCheck_(Tnow, s) && prof_.finished(this->now())) {
     active_goal_ = false;

@@ -76,12 +76,37 @@ ros2 topic pub --once /cartesian_controller/target_pose geometry_msgs/PoseStampe
   }'
 ```
 
+## Visualization - Plot Cartesian Velocity
+
+Record and save Cartesian velocity as video files showing the trapezoidal velocity profile:
+
+```bash
+# Terminal 1-3: Start simulation, controller, and cartesian controller (as above)
+
+# Terminal 4: Record velocity (run from desired save location)
+ros2 run ur_cartesian_controller plot_velocity.py
+
+# Terminal 5: Run motion demo
+ros2 run ur_cartesian_controller demo_grid.py
+
+# When motion complete, press Ctrl+C in Terminal 4
+# Videos saved: linear_velocity_<timestamp>.mp4, angular_velocity_<timestamp>.mp4
+```
+
+**Output videos show:**
+- Linear velocity: vx, vy, vz + ||v|| norm (m/s)
+- Angular velocity: ωx, ωy, ωz + ||ω|| norm (rad/s)
+- Trapezoidal profile clearly visible in norm plots
+
+**Requirements:** `pip install matplotlib`
+
 ## Topics
 
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/cartesian_controller/target_point` | `geometry_msgs/PointStamped` | Target position (keeps current orientation) |
 | `/cartesian_controller/target_pose` | `geometry_msgs/PoseStamped` | Target pose (position + orientation) |
+| `/cartesian_controller/cartesian_velocity` | `geometry_msgs/TwistStamped` | Cartesian velocity output (V = J·dq) |
 | `/forward_velocity_controller/commands` | `std_msgs/Float64MultiArray` | Joint velocities output [7] |
 | `/joint_states` | `sensor_msgs/JointState` | Current joint states input |
 

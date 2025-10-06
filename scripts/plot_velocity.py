@@ -39,19 +39,36 @@ class VelocityRecorder(Node):
 
     def velocity_callback(self, msg):
         """Store velocity data."""
-        if self.start_time is None:
-            self.start_time = self.get_clock().now()
-            self.get_logger().info('Recording started!')
+        try:
+            if self.start_time is None:
+                self.start_time = self.get_clock().now()
+                self.get_logger().info('Recording started!')
 
-        t = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
+            t = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
 
-        self.times.append(t)
-        self.vx.append(msg.twist.linear.x)
-        self.vy.append(msg.twist.linear.y)
-        self.vz.append(msg.twist.linear.z)
-        self.wx.append(msg.twist.angular.x)
-        self.wy.append(msg.twist.angular.y)
-        self.wz.append(msg.twist.angular.z)
+            vx = float(msg.twist.linear.x)
+            vy = float(msg.twist.linear.y)
+            vz = float(msg.twist.linear.z)
+            wx = float(msg.twist.angular.x)
+            wy = float(msg.twist.angular.y)
+            wz = float(msg.twist.angular.z)
+
+            self.times.append(t)
+            self.vx.append(vx)
+            self.vy.append(vy)
+            self.vz.append(vz)
+            self.wx.append(wx)
+            self.wy.append(wy)
+            self.wz.append(wz)
+
+            # Print norms every 50 samples (~0.5s at 100Hz)
+            if len(self.times) % 50 == 0:
+                v_norm = np.sqrt(vx**2 + vy**2 + vz**2)
+                w_norm = np.sqrt(wx**2 + wy**2 + wz**2)
+                print(f"[t={t:.2f}s] ||v||={v_norm:.4f} m/s, ||ω||={w_norm:.4f} rad/s, samples={len(self.times)}")
+
+        except Exception as e:
+            self.get_logger().error(f'Error in callback: {e}')
 
     def save_videos(self, output_dir='.', fps=30):
         """Save velocity data as video files."""
@@ -159,20 +176,82 @@ class VelocityRecorder(Node):
         self.get_logger().info(f'Done! Samples: {len(t)}, Duration: {t[-1]:.2f}s')
 
 def main():
+    from threading import Thread, Event
+    import sys
+    import tty
+    import termios
+
     rclpy.init()
     node = VelocityRecorder()
 
     output_dir = '.'  # Save in current directory
 
-    node.get_logger().info('Recording velocity data...')
-    node.get_logger().info('Send motion commands, then press Ctrl+C when done')
+    # Flag to signal shutdown
+    stop_event = Event()
 
+    # ROS spin in background thread
+    def spin_thread():
+        while rclpy.ok() and not stop_event.is_set():
+            try:
+                rclpy.spin_once(node, timeout_sec=0.1)
+            except Exception as e:
+                print(f"Spin error (continuing): {e}")
+
+    thread = Thread(target=spin_thread, daemon=True)
+    thread.start()
+
+    print("="*60)
+    print("🎥 Cartesian Velocity Recorder")
+    print("="*60)
+    print("Recording velocity data...")
+    print("Send motion commands to your robot")
+    print()
+    print("Press ESC to stop and save videos")
+    print("="*60)
+    print()
+
+    # Wait for ESC key
     try:
-        while rclpy.ok():
-            rclpy.spin_once(node, timeout_sec=0.1)
+        # Save terminal settings
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            while not stop_event.is_set():
+                if sys.stdin in [sys.stdin]:
+                    import select
+                    if select.select([sys.stdin], [], [], 0.1)[0]:
+                        key = sys.stdin.read(1)
+                        if key == '\x1b':  # ESC key
+                            break
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    except (KeyboardInterrupt, EOFError):
+        pass
 
-    except KeyboardInterrupt:
-        node.get_logger().info('Stopping recording...')
+    # Signal shutdown
+    print('\n' + '='*60)
+    print('Stopping recording...')
+    print('='*60)
+    stop_event.set()
+    thread.join(timeout=2.0)
+
+    # Print summary
+    if len(node.times) > 0:
+        vx_arr = np.array(node.vx)
+        vy_arr = np.array(node.vy)
+        vz_arr = np.array(node.vz)
+        wx_arr = np.array(node.wx)
+        wy_arr = np.array(node.wy)
+        wz_arr = np.array(node.wz)
+        v_norm = np.sqrt(vx_arr**2 + vy_arr**2 + vz_arr**2)
+        w_norm = np.sqrt(wx_arr**2 + wy_arr**2 + wz_arr**2)
+
+        print(f"\n📊 Recording Summary:")
+        print(f"  Duration: {node.times[-1]:.2f}s")
+        print(f"  Samples: {len(node.times)}")
+        print(f"  Linear velocity  ||v||: max={v_norm.max():.4f} m/s, avg={v_norm.mean():.4f} m/s")
+        print(f"  Angular velocity ||ω||: max={w_norm.max():.4f} rad/s, avg={w_norm.mean():.4f} rad/s")
+        print()
 
     # Save videos
     node.save_videos(output_dir, fps=30)

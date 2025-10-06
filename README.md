@@ -89,7 +89,7 @@ ros2 run ur_cartesian_controller plot_velocity.py
 # Terminal 5: Run motion demo
 ros2 run ur_cartesian_controller demo_grid.py
 
-# When motion complete, press Ctrl+C in Terminal 4
+# When motion complete, press ESC in Terminal 4 to stop and save
 # Videos saved: linear_velocity_<timestamp>.mp4, angular_velocity_<timestamp>.mp4
 ```
 
